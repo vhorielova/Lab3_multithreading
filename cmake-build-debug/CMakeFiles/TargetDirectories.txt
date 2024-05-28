@@ -1,0 +1,3 @@
+/Users/vhorielova/Desktop/Lab3_multithreading/cmake-build-debug/CMakeFiles/Lab3_multithreading.dir
+/Users/vhorielova/Desktop/Lab3_multithreading/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/vhorielova/Desktop/Lab3_multithreading/cmake-build-debug/CMakeFiles/rebuild_cache.dir
