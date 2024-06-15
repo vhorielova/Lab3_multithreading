@@ -1,35 +1,57 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
-//#include "Strassen'sAlgorithm.hh"
+#include <thread>
+#include <random>
+#include <chrono>
 
 using namespace std;
+using namespace std::chrono;
 
 class Matrix {
 private:
     vector<vector<double>> mat;
     int n;
 
-    void LUDecomposition(vector<vector<double>>& L, vector<vector<double>>& U) {
-        for (int i = 0; i < n; i++) {
-            for (int k = i; k < n; k++) {
+    void computeU(int i, vector<vector<double>>& L, vector<vector<double>>& U) {
+        for (int k = i; k < n; k++) {
+            double sum = 0;
+            for (int j = 0; j < i; j++) {
+                sum += (L[i][j] * U[j][k]);
+            }
+            U[i][k] = mat[i][k] - sum;
+        }
+    }
+
+    void computeL(int i, vector<vector<double>>& L, vector<vector<double>>& U) {
+        for (int k = i; k < n; k++) {
+            if (i == k) {
+                L[i][i] = 1;
+            }
+            else {
                 double sum = 0;
                 for (int j = 0; j < i; j++) {
-                    sum += (L[i][j] * U[j][k]);
+                    sum += (L[k][j] * U[j][i]);
                 }
-                U[i][k] = mat[i][k] - sum;
+                L[k][i] = (mat[k][i] - sum) / U[i][i];
             }
-            for (int k = i; k < n; k++) {
-                if (i == k)
-                    L[i][i] = 1;
-                else {
-                    double sum = 0;
-                    for (int j = 0; j < i; j++) {
-                        sum += (L[k][j] * U[j][i]);
-                    }
-                    L[k][i] = (mat[k][i] - sum) / U[i][i];
-                }
-            }
+        }
+    }
+
+    void LUDecomposition(vector<vector<double>>& L, vector<vector<double>>& U) {
+        for (int i = 0; i < n; i++) {
+            thread t1(&Matrix::computeU, this, i, ref(L), ref(U));
+            thread t2(&Matrix::computeL, this, i, ref(L), ref(U));
+
+            t1.join();
+            t2.join();
+        }
+    }
+
+    void LUDecompositionSingleThread(vector<vector<double>>& L, vector<vector<double>>& U) {
+        for (int i = 0; i < n; i++) {
+            computeU(i, L, U);
+            computeL(i, L, U);
         }
     }
 
@@ -38,10 +60,13 @@ public:
         mat.resize(n, vector<double>(n, 0));
     }
 
-    void inputMatrix() {
+    void randomizeMatrix() {
+        random_device rd;
+        mt19937 gen(rd());
+        uniform_int_distribution<> dis(1, 100);
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < n; j++) {
-                cin >> mat[i][j];
+                mat[i][j] = dis(gen);
             }
         }
     }
@@ -55,62 +80,34 @@ public:
         }
     }
 
-    Matrix inverse() {
-        Matrix inv(n);
+    void benchmark() {
         Matrix L(n);
         Matrix U(n);
 
+        auto start = high_resolution_clock::now();
+        LUDecompositionSingleThread(L.mat, U.mat);
+        auto end = high_resolution_clock::now();
+        auto durationSingle = duration_cast<microseconds>(end - start).count();
+        cout << "Single-threaded LU decomposition took " << durationSingle << " microseconds.\n";
+
+        start = high_resolution_clock::now();
         LUDecomposition(L.mat, U.mat);
-
-        Matrix identity(n);
-        for (int i = 0; i < n; i++) identity.mat[i][i] = 1;
-
-        for (int i = 0; i < n; i++) {
-            vector<double> y(n, 0);
-            for (int j = 0; j < n; j++) {
-                double sum = 0;
-                for (int k = 0; k < j; k++) {
-                    sum += L.mat[j][k] * y[k];
-                }
-                y[j] = (identity.mat[j][i] - sum) / L.mat[j][j];
-            }
-            for (int j = n - 1; j >= 0; j--) {
-                double sum = 0;
-                for (int k = j + 1; k < n; k++) {
-                    sum += U.mat[j][k] * inv.mat[k][i];
-                }
-                inv.mat[j][i] = (y[j] - sum) / U.mat[j][j];
-            }
-        }
-        return inv;
+        end = high_resolution_clock::now();
+        auto durationMulti = duration_cast<microseconds>(end - start).count();
+        cout << "Multi-threaded LU decomposition took " << durationMulti << " microseconds.\n";
     }
-
-    /*void multiply(const Matrix& B, Matrix& result) const {
-        StrassenMultiple(mat, B.mat, result.mat, n);
-    }*/
 };
 
 int main() {
-    int n;
+    vector<int> sizes = { 4, 16, 64, 128, 256, 512 };
 
-    cout << "Enter the dimension of the matrix: ";
-    cin >> n;
-    cout << "Enter the matrix:" << endl;
-
-    Matrix A(n);
-    A.inputMatrix();
-
-    Matrix A_inv = A.inverse();
-
-    cout << "The inverse matrix is:" << endl;
-    A_inv.printMatrix();
-    cout << endl;
-
-    /*Matrix checkMatrix(n);
-
-    cout << "The result of StrassenMultiple:" << endl;
-    A.multiply(A_inv, checkMatrix);
-    checkMatrix.printMatrix();*/
+    for (int n : sizes) {
+        cout << "Benchmarking matrix of size " << n << "x" << n << ":\n";
+        Matrix A(n);
+        A.randomizeMatrix();
+        A.benchmark();
+        cout << endl;
+    }
 
     return 0;
 }
